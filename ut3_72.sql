@@ -22,7 +22,7 @@ round(1.0*(num_files- coalesce(coalesce(num_files_complete,0),0))*100/num_files,
 finish_time from restores
 where
 (restore_type_id is null or
-restore_type_id = 3 ) and
+restore_type_id = 3 or restore_type_id = 4) and
 finish_time > now() - interval '3 days'
 and (1.0 *(num_files-coalesce(num_files_complete,0))/ num_files > 0.05)
 and is_ready = true order by finish_time desc) as t2
@@ -50,7 +50,7 @@ from restores
 where
 is_ready = true and
 restores.finish_time > now() - interval '3 days'
-and (restore_type_id is null or restore_type_id = 3 )
+and (restore_type_id is null or restore_type_id = 3 or restore_type_id = 4 )
 group by coalesce(restore_type_id,0)*0;
 
 
@@ -68,7 +68,7 @@ from restores
 where
 is_ready = true and
 restores.finish_time > now() - interval '7 days'
-and (restore_type_id is null or restore_type_id = 3 )
+and (restore_type_id is null or restore_type_id = 3 or restore_type_id = 4)
 group by coalesce(restore_type_id,0)*0;
 
 
@@ -87,7 +87,7 @@ from restores
 where
 is_ready = true and
 restores.finish_time > now() - interval '30 days'
-and (restore_type_id is null or restore_type_id = 3 )
+and (restore_type_id is null or restore_type_id = 3 or restore_type_id = 4)
 group by coalesce(restore_type_id,0)*0;
 
 # 按下载文件分类
@@ -102,7 +102,7 @@ from restores
 where
 is_ready = true and
 restores.finish_time > now() - interval '3 days'
-and (restore_type_id is null or restore_type_id = 3 )
+and (restore_type_id is null or restore_type_id = 3 or restore_type_id = 4)
 group by coalesce(restore_type_id,0)*0;
 
 
@@ -117,7 +117,7 @@ from restores
 where
 is_ready = true and
 restores.finish_time > now() - interval '7 days'
-and (restore_type_id is null or restore_type_id = 3 )
+and (restore_type_id is null or restore_type_id = 3 or restore_type_id = 4)
 group by coalesce(restore_type_id,0)*0;
 
 
@@ -133,7 +133,7 @@ from restores
 where
 is_ready = true and
 restores.finish_time > now() - interval '30 days'
-and (restore_type_id is null or restore_type_id = 3 )
+and (restore_type_id is null or restore_type_id = 3 or restore_type_id = 4)
 group by coalesce(restore_type_id,0)*0;
 
 
@@ -161,7 +161,7 @@ round(100 *1.0*(sum(coalesce(num_files_complete,0)))/sum(num_files),2) as "file 
 where
 is_ready = true and
 restores.finish_time > now() - interval '1 days'
-and (restore_type_id is null or restore_type_id = 3 )
+and (restore_type_id is null or restore_type_id = 3 or restore_type_id = 4)
 group by coalesce(restore_type_id,0)*0
 )
 
@@ -197,7 +197,7 @@ cast(round(1.0*(num_files- coalesce(coalesce(num_files_complete,0),0))*100/num_f
 finish_time from restores
 where
 (restore_type_id is null or
-restore_type_id = 3 ) and
+restore_type_id = 3 or restore_type_id = 4) and
 finish_time > now() - interval '3 days'
 and (1.0 *(num_files-coalesce(num_files_complete,0))/ num_files > 0.05)
 and is_ready = true order by finish_time desc) as t2
@@ -214,7 +214,7 @@ https://redmine.mozycorp.com/issues/98426
 
 
 
-Restore Report from past 24 hours:
+Restore Report from past 72 hours:
 
 select
 coalesce(restore_types.name, 'yanni') as restore_type,
@@ -243,7 +243,7 @@ is_ready = true and
 restores.finish_time > now() - interval '3 days'
 and (
 restore_type_id  is null or
-(restore_type_id = 3))
+(restore_type_id = 3)  or restore_type_id = 4  )
 group by restore_type_id
 order by  restore_type_id)
 as t2
@@ -255,7 +255,7 @@ on t2.restore_type_id =  restore_types.id;
 
 
 
-past 24 hours by site:
+past 72 hours by site:
 
 select
 site as Site,
@@ -273,7 +273,7 @@ where
 restores.is_ready = true and
 restores.restore_type_id = restore_types.id and
 restores.finish_time > now() - interval '3 days' and
-restore_types.id = 3
+(restore_types.id = 3 or restore_types.id =  4 or restore_types.id is null  )
 group by Site
 order by  Site ;
 
@@ -312,7 +312,7 @@ is_ready = true and
 restores.finish_time > now() - interval '7 days'
 and (
 restore_type_id  is null or
-(restore_type_id = 3))
+(restore_type_id = 3)  or restore_type_id = 4 )
 group by restore_type_id
 order by  restore_type_id)
 as t2
@@ -343,6 +343,6 @@ where
 restores.is_ready = true and
 restores.restore_type_id = restore_types.id and
 restores.finish_time > now() - interval '7 days' and
-restore_types.id = 3
+( restore_types.id = 3 or restore_types.id =  4 or restore_types.id is null)
 group by Site
 order by  Site ;
