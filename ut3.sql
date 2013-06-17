@@ -26,7 +26,9 @@ restore_type_id = 3 or restore_type_id = 4) and
 finish_time > now() - interval '1 days'
 and (1.0 *(num_files-coalesce(num_files_complete,0))/ num_files > 0.05)
 and is_ready = true order by finish_time desc) as t2
-left join restore_types on t2.type =  restore_types.id;
+left join restore_types on t2.type =  restore_types.id
+order by site, processed_by
+;
 
 
 
