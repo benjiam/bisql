@@ -1,7 +1,4 @@
 
-
-# 遍历所有错误的restore
-
 select
 restore_id,
 site,
@@ -34,10 +31,6 @@ order by site, processed_by
 
 
 
-
-#past 24
-
-# request 分类情况检索
 
 select
 sum(case when num_files <= coalesce(num_files_complete,0) then 1 else 0 end) as "A",
@@ -92,7 +85,6 @@ restores.finish_time > now() - interval '30 days'
 and (restore_type_id is null or restore_type_id = 3 or restore_type_id = 4)
 group by coalesce(restore_type_id,0)*0;
 
-# 按下载文件分类
 
 
 select
@@ -100,10 +92,12 @@ sum(
 case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0) end
 ) as "B",
 cast(round(100 *1.0*(sum(
-case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end                     ))/sum(num_files), 3) as char(6)) || '%' as "file success rate %",
-sum(num_files) - sum(case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end      ) as "C",
-    cast (round(100 *1.0*(  sum(num_files) -  sum(     case when  num_files <  coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end          ))/sum(num_files),3) as char (6) ) || '%' as "failed rate %",
-    sum(num_files)  as "A"
+case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end
+))/sum(num_files), 3) as char(6)) || '%' as "file success rate %",
+sum(num_files) - sum(case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end) as "C",
+cast (round(100 *1.0*( sum(num_files) -  sum( case when  num_files <  coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end
+))/sum(num_files),3) as char (6) ) || '%' as "failed rate %",
+sum(num_files)  as "A"
 from restores
 where
 is_ready = true and
@@ -116,78 +110,47 @@ group by coalesce(restore_type_id,0)*0;
 
 
 select
-sum( case when  num_files <  coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end   ) as "B",
-        cast(round(100 *1.0*(sum(      case when  num_files <  coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end                     ))/sum(num_files), 3) as char(6)) || '%' as "file success rate %",
-            sum(num_files) - sum(   case when  num_files <  coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end      ) as "C",
-                cast (round(100 *1.0*(  sum(num_files) -  sum(     case when  num_files <  coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end          ))/sum(num_files),3) as char (6) ) || '%' as "failed rate %",
-                    sum(num_files)  as "A"
-                    from restores
-                    where
-                    is_ready = true and
-                    restores.finish_time > now() - interval '7 days'
-                    and (restore_type_id is null or restore_type_id = 3 or restore_type_id = 4)
-    group by coalesce(restore_type_id,0)*0;
-
-
-
-
-
-
-select
-sum( case when  num_files <  coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end   ) as "B",
-        cast(round(100 *1.0*(sum(      case when  num_files <  coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end                     ))/sum(num_files), 3) as char(6)) || '%' as "file success rate %",
-            sum(num_files) - sum(   case when  num_files <  coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end      ) as "C",
-                cast (round(100 *1.0*(  sum(num_files) -  sum(     case when  num_files <  coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end          ))/sum(num_files),3) as char (6) ) || '%' as "failed rate %",
-                    sum(num_files)  as "A"
-                    from restores
-                    where
-                    is_ready = true and
-                    restores.finish_time > now() - interval '30 days'
-                    and (restore_type_id is null or restore_type_id = 3 or restore_type_id = 4)
-    group by coalesce(restore_type_id,0)*0;
-
-
-# 测试保留
-
-select
-restores,
-"prefect rate %",
-"imperfect rate %" as "imprefect restore (file success rate < 5%) %",
-"failed restore rate %",
-"file success rate %" from (
-select
-count(*) as restores,
-sum(case when num_files = coalesce(num_files_complete,0) then 1 else 0 end) as perfect_restores,
-sum(case when num_files = coalesce(num_files_complete,0) then 1 else 0 end) as  "A",
-sum(case when num_files- coalesce(num_files_complete,0) > 0 and 1.0*(num_files - coalesce(num_files_complete,0))/num_files <=0.05  then 1 else 0 end)as  "B",
-sum(case when num_files - coalesce(num_files_complete,0) > 0 and 1.0*(num_files - coalesce(num_files_complete,0))/num_files >0.05  then 1 else 0 end) as  "C",
-round(100 *1.0*(sum(case when num_files = coalesce(num_files_complete,0) then 1 else 0 end))/ count(*), 2) as  "prefect rate %",
-round(100 *1.0*(sum(case when num_files- coalesce(num_files_complete,0) > 0 and 1.0*(num_files - coalesce(num_files_complete,0))/num_files <=0.05  then 1 else 0 end))/ count(*), 2) as  "imperfect rate %",
-round(100 *1.0*(sum(case when num_files - coalesce(num_files_complete,0) > 0 and (1.0*(num_files - coalesce(num_files_complete,0))/num_files >0.05)  then 1 else 0 end))/ count(*), 2) as  "failed restore rate %",
-sum(num_files) as sum_requestfiles,
-sum(coalesce(num_files_complete,0)) as sum_completefiles,
-sum(num_files) - sum(coalesce(num_files_complete,0)) as sum_failedfiles,
-round(100 *1.0*(sum(coalesce(num_files_complete,0)))/sum(num_files),2) as "file success rate %"  from restores
+sum( case when num_files <  coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end) as "B",
+cast(round(100 *1.0*(sum( case when  num_files <  coalesce(num_files_complete,0)
+then num_files else coalesce(num_files_complete,0)  end ))/sum(num_files), 3) as char(6)) || '%' as
+"file success rate %",
+sum(num_files) - sum (case when  num_files <  coalesce(num_files_complete,0) then num_files
+else coalesce(num_files_complete,0)  end) as "C",
+cast (round(100 *1.0*(  sum(num_files) -  sum(case when  num_files <  coalesce(num_files_complete,0)
+then num_files else coalesce(num_files_complete,0)  end))/sum(num_files),3) as char (6) )
+|| '%' as "failed rate %",
+sum(num_files)  as "A"
+from restores
 where
 is_ready = true and
-restores.finish_time > now() - interval '1 days'
+restores.finish_time > now() - interval '7 days'
 and (restore_type_id is null or restore_type_id = 3 or restore_type_id = 4)
-group by coalesce(restore_type_id,0)*0
-)
-
-
-
-#select id,is_ready, num_files, num_files_complete from restores where  1.0*(num_files - coalesce(num_files_complete,0))/num_files >0.05 and
-#restores.finish_time > now() - interval '1 days' and
-#(restore_type_id is null or restore_type_id = 3
-
-Restore status
+group by coalesce(restore_type_id,0)*0;
 
 
 
 
 
-Failed Restore Report:
+
+select
+sum( case when  num_files <  coalesce(num_files_complete,0)
+then num_files else coalesce(num_files_complete,0)  end) as "B",
+cast(round(100 *1.0*(sum( case when  num_files <  coalesce(num_files_complete,0) then
+num_files else coalesce(num_files_complete,0)  end ))/sum(num_files), 3) as char(6))
+|| '%' as "file success rate %",
+sum(num_files) - sum(case when  num_files <  coalesce(num_files_complete,0) then
+num_files else coalesce(num_files_complete,0)  end) as "C",
+cast (round(100 *1.0*(  sum(num_files) -  sum(case when  num_files <  coalesce(num_files_complete,0) then
+num_files else coalesce(num_files_complete,0)  end))/sum(num_files),3) as char (6) )
+|| '%' as "failed rate %",
+sum(num_files)  as "A"
+from restores
+where
+is_ready = true and
+restores.finish_time > now() - interval '30 days'
+and (restore_type_id is null or restore_type_id = 3 or restore_type_id = 4)
+group by coalesce(restore_type_id,0)*0;
+
 
 select
 restore_id,
@@ -210,21 +173,12 @@ where
 restore_type_id = 3 or restore_type_id = 4) and
 finish_time > now() - interval '1 days'
 and (1.0 *(num_files-coalesce(num_files_complete,0))/ num_files > 0.05)
-and is_ready = true order by finish_time desc) as t2
-left join restore_types on t2.type =  restore_types.id;
-
-
-Restore Failure Analysis
-
-Restore  1773600
-Root cause:
-Trogdor can’t get the manifest, related to ticket #99267 about TMS failover.
-https://redmine.mozycorp.com/issues/98426
+and is_ready = true order by id desc) as t2
+left join restore_types on t2.type =  restore_types.id order by restore_id desc ;
 
 
 
 
-Restore Report from past 24 hours:
 
 select
 coalesce(restore_types.name, 'yanni') as restore_type,
@@ -265,8 +219,6 @@ on t2.restore_type_id =  restore_types.id;
 
 
 
-past 24 hours by site:
-
 select
 site as Site,
 count(*) as Restores,
@@ -290,9 +242,6 @@ order by  Site ;
 
 
 
-
-
-Last 7 days restore report:
 
 
 select
@@ -336,7 +285,6 @@ on t2.restore_type_id =  restore_types.id;
 
 
 
-Last 7 days Neptune report:
 
 
 select
