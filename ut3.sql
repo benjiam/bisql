@@ -20,6 +20,7 @@ finish_time from restores
 where
 (restore_type_id is null or
 restore_type_id = 3 or restore_type_id = 4) and
+num_files > 0 and
 finish_time > now() - interval '1 days'
 and (1.0 *(num_files-coalesce(num_files_complete,0))/ num_files > 0.05)
 and is_ready = true order by finish_time desc) as t2
@@ -29,127 +30,181 @@ order by site, processed_by
 
 
 
+select
+sum( case when ddd.num_files =  ddd.completed_files then 1 else 0 end ) as "Number",
+cast
+(round(
+100*1.0* sum( case when ddd.num_files =  ddd.completed_files then 1 else 0 end )/count(*)
+, 3)
+as char (6)) ||'%' as  "Percentage"
+,
+sum( case when  (ddd.num_files > ddd.completed_files)and (ddd.num_files -  ddd.completed_files)*1.0/ddd.num_files <0.05  then 1 else 0 end ) as "Number",
+cast
+( round(
+100*1.0* sum( case when (ddd.num_files >  ddd.completed_files)and (ddd.num_files -  ddd.completed_files)*1.0/ddd.num_files <0.05 then 1 else 0 end )/count(*)
+ , 3)
+as char (6)) ||'%' as  "Percentage"
+ ,
+sum( case when (ddd.num_files -  ddd.completed_files)*1.0/ddd.num_files >=0.05  then 1 else 0 end ) as "Number",
+ cast
+(100  -  round(
+100*1.0* sum( case when ddd.num_files =  ddd.completed_files then 1 else 0 end )/count(*)
+ , 3)  -   round(
+100*1.0* sum( case when (ddd.num_files >  ddd.completed_files)and (ddd.num_files -  ddd.completed_files)*1.0/ddd.num_files <0.05 then 1 else 0 end )/count(*)
+ , 3)
+ as char (6)) ||'%' as  "Percentage" ,
+count(*) as "Total restore request"
+from
+(select site,   (case when  coalesce(num_files,0) >  coalesce(num_files_complete,0) then   coalesce(num_files_complete,0) else  coalesce(num_files,0)  end   ) as completed_files,  coalesce(num_files,0) as num_files from
+restores where finish_time > now() - interval '1 days'
+and
+num_files > 0
+and (restore_type_id  is null or (restore_type_id = 3)  or restore_type_id = 4) 
+and restores.is_ready = true ) as ddd;
+
+select
+sum( case when ddd.num_files =  ddd.completed_files then 1 else 0 end ) as "Number",
+cast
+( round(
+100*1.0* sum( case when ddd.num_files =  ddd.completed_files then 1 else 0 end )/count(*)
+ , 3) as char (6)) ||'%' as  "Percentage" ,
+sum( case when  (ddd.num_files >  ddd.completed_files) and (ddd.num_files -  ddd.completed_files)*1.0/ddd.num_files <0.05  then 1 else 0 end ) as "Number",
+cast
+( round(
+100*1.0* sum( case when (ddd.num_files >  ddd.completed_files)and (ddd.num_files -  ddd.completed_files)*1.0/ddd.num_files <0.05 then 1 else 0 end )/count(*)
+ , 3) as char (6)) ||'%' as  "Percentage"
+ ,
+sum( case when (ddd.num_files -  ddd.completed_files)*1.0/ddd.num_files >=0.05  then 1 else 0 end ) as "Number",
+ cast
+(100  -  round(
+100*1.0* sum( case when ddd.num_files =  ddd.completed_files then 1 else 0 end )/count(*)
+ , 3)  - round(
+100*1.0* sum( case when (ddd.num_files >  ddd.completed_files)and (ddd.num_files -  ddd.completed_files)*1.0/ddd.num_files <0.05 then 1 else 0 end )/count(*)
+ , 3)
+ as char (6)) ||'%' as  "Percentage" ,
+count(*) as "Total restore request"
+from
+(select 
+site,   
+(case when  coalesce(num_files,0) >  coalesce(num_files_complete,0)  then coalesce(num_files_complete,0) else coalesce(num_files,0)  end   ) as completed_files,  coalesce(num_files,0) as num_files from
+restores where finish_time > now() - interval '7 days'
+and
+num_files > 0
+and (restore_type_id  is null or (restore_type_id = 3)  or restore_type_id = 4  )  and restores.is_ready = true ) as ddd;
 
 
 
 select
-sum(case when num_files <= coalesce(num_files_complete,0) then 1 else 0 end) as "A",
-cast (round(100 *1.0*(sum(case when num_files <= coalesce(num_files_complete,0) then 1 else 0 end))/ count(*), 3)
-as char(6) ) || '%' as  "prefect rate %",
-sum(case when num_files- coalesce(num_files_complete,0) > 0 and 1.0*(num_files - coalesce(num_files_complete, 0))/num_files <=0.05  then 1 else 0 end) as "B",
-cast (round(100 *1.0*(sum(case when num_files- coalesce(num_files_complete,0) > 0 and 1.0*(num_files - coalesce(num_files_complete,0))/num_files <=0.05  then 1 else 0 end))/ count(*), 3) as char(6)) || '%' as  "imperfect rate %",
-sum(case when num_files - coalesce(num_files_complete,0) > 0 and 1.0*(num_files - coalesce(num_files_complete,0))/num_files >0.05  then 1 else 0 end) as  "C",
-cast( round(100 *1.0*(sum(case when num_files - coalesce(num_files_complete,0) > 0 and (1.0*(num_files - coalesce(num_files_complete,0))/num_files >0.05)  then 1 else 0 end))/ count(*), 3) as char (6)) ||'%' as  "failed restore rate %",
-count(*) as restores
-from restores
-where
-is_ready = true and
-restores.finish_time > now() - interval '1 days'
-and (restore_type_id is null or restore_type_id = 3 or restore_type_id = 4 )
-group by coalesce(restore_type_id,0)*0;
-
-
-
-select
-sum(case when num_files <= coalesce(num_files_complete,0) then 1 else 0 end) as "A",
-cast (round(100 *1.0*(sum(case when num_files <= coalesce(num_files_complete,0) then 1 else 0 end))/ count(*), 3)
-as char(6) ) || '%' as  "prefect rate %",
-sum(case when num_files- coalesce(num_files_complete,0) > 0 and 1.0*(num_files - coalesce(num_files_complete, 0))/num_files <=0.05  then 1 else 0 end) as "B",
-cast (round(100 *1.0*(sum(case when num_files- coalesce(num_files_complete,0) > 0 and 1.0*(num_files - coalesce(num_files_complete,0))/num_files <=0.05  then 1 else 0 end))/ count(*), 3) as char(6)) || '%' as  "imperfect rate %",
-sum(case when num_files - coalesce(num_files_complete,0) > 0 and 1.0*(num_files - coalesce(num_files_complete,0))/num_files >0.05  then 1 else 0 end) as  "C",
-cast( round(100 *1.0*(sum(case when num_files - coalesce(num_files_complete,0) > 0 and (1.0*(num_files - coalesce(num_files_complete,0))/num_files >0.05)  then 1 else 0 end))/ count(*), 3) as char (6)) ||'%' as  "failed restore rate %",
-count(*) as restores
-from restores
-where
-is_ready = true and
-restores.finish_time > now() - interval '7 days'
-and (restore_type_id is null or restore_type_id = 3 or restore_type_id = 4)
-group by coalesce(restore_type_id,0)*0;
-
-
+sum( case when ddd.num_files =  ddd.completed_files then 1 else 0 end ) as "Number",
+cast
+( round(
+100*1.0* sum( case when ddd.num_files =  ddd.completed_files then 1 else 0 end )/count(*)
+ , 3)
+as char (6)) ||'%' as  "Percentage"
+ ,
+sum( case when  (ddd.num_files >  ddd.completed_files)and (ddd.num_files -  ddd.completed_files)*1.0/ddd.num_files <0.05  then 1 else 0 end ) as "Number",
+cast
+( round(
+100*1.0* sum( case when (ddd.num_files >  ddd.completed_files)and (ddd.num_files -  ddd.completed_files)*1.0/ddd.num_files <0.05 then 1 else 0 end )/count(*)
+ , 3)
+as char (6)) ||'%' as  "Percentage"
+ ,
+sum( case when (ddd.num_files -  ddd.completed_files)*1.0/ddd.num_files >=0.05  then 1 else 0 end ) as "Number",
+ cast
+(100  -  round(
+100*1.0* sum( case when ddd.num_files =  ddd.completed_files then 1 else 0 end )/count(*)
+ , 3)  -   round(
+100*1.0* sum( case when (ddd.num_files >  ddd.completed_files)and (ddd.num_files -  ddd.completed_files)*1.0/ddd.num_files <0.05 then 1 else 0 end )/count(*)
+ , 3)
+ as char (6)) ||'%' as  "Percentage" ,
+count(*) as "Total restore request"
+from
+(select site,   (case when  coalesce(num_files,0) >  coalesce(num_files_complete,0) then   coalesce(num_files_complete,0) else  coalesce(num_files,0)  end   ) as completed_files,  coalesce(num_files,0) as num_files from
+restores where finish_time > now() - interval '30 days'
+and
+num_files > 0
+and (restore_type_id  is null or (restore_type_id = 3)  or restore_type_id = 4  )  and restores.is_ready = true ) as ddd;
 
 
 select
-sum(case when num_files <= coalesce(num_files_complete,0) then 1 else 0 end) as "A",
-cast (round(100 *1.0*(sum(case when num_files <= coalesce(num_files_complete,0) then 1 else 0 end))/ count(*), 3)
-as char(6) ) || '%' as  "prefect rate %",
-sum(case when num_files- coalesce(num_files_complete,0) > 0 and 1.0*(num_files - coalesce(num_files_complete, 0))/num_files <=0.05  then 1 else 0 end) as "B",
-cast (round(100 *1.0*(sum(case when num_files- coalesce(num_files_complete,0) > 0 and 1.0*(num_files - coalesce(num_files_complete,0))/num_files <=0.05  then 1 else 0 end))/ count(*), 3) as char(6)) || '%' as  "imperfect rate %",
-sum(case when num_files - coalesce(num_files_complete,0) > 0 and 1.0*(num_files - coalesce(num_files_complete,0))/num_files >0.05  then 1 else 0 end) as  "C",
-cast( round(100 *1.0*(sum(case when num_files - coalesce(num_files_complete,0) > 0 and (1.0*(num_files - coalesce(num_files_complete,0))/num_files >0.05)  then 1 else 0 end))/ count(*), 3) as char (6)) ||'%' as  "failed restore rate %",
-count(*) as restores
-from restores
-where
-is_ready = true and
-restores.finish_time > now() - interval '30 days'
-and (restore_type_id is null or restore_type_id = 3 or restore_type_id = 4)
-group by coalesce(restore_type_id,0)*0;
-
-
-
-select
-sum(
-case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0) end
-) as "B",
-cast(round(100 *1.0*(sum(
-case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end
-))/sum(num_files), 3) as char(6)) || '%' as "file success rate %",
-sum(num_files) - sum(case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end) as "C",
-cast (round(100 *1.0*( sum(num_files) -  sum( case when  num_files <  coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end
-))/sum(num_files),3) as char (6) ) || '%' as "failed rate %",
-sum(num_files)  as "A"
-from restores
-where
-is_ready = true and
-restores.finish_time > now() - interval '1 days'
-and (restore_type_id is null or restore_type_id = 3 or restore_type_id = 4)
-group by coalesce(restore_type_id,0)*0;
-
-
-
+sum(ddd.completed_files) as "Number",
+cast
+( round(
+100*1.0* sum(ddd.completed_files  )/ sum(ddd.num_files)
+ , 3)
+as char (6)) ||'%' as  "Percentage"
+ ,
+sum(num_files) - sum(ddd.completed_files)    as "Number",
+cast
+( round(
+100 - 100*1.0* sum(ddd.completed_files  )/ sum(ddd.num_files)
+ , 3)
+as char (6)) ||'%' as  "Percentage"
+,
+sum(ddd.num_files) as "Number"
+from
+(select 
+site,   
+(case when  coalesce(num_files,0) >  coalesce(num_files_complete,0) then   coalesce(num_files_complete,0) else  coalesce(num_files,0)  end   ) as completed_files,
+coalesce(num_files,0) as num_files from
+restores where
+num_files > 0 and
+finish_time > now() - interval '1 days' 
+and (restore_type_id  is null 
+or (restore_type_id = 3)  or restore_type_id = 4  )  and restores.is_ready = true ) as ddd;
 
 
 select
-sum( case when num_files <  coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0)  end) as "B",
-cast(round(100 *1.0*(sum( case when  num_files <  coalesce(num_files_complete,0)
-then num_files else coalesce(num_files_complete,0)  end ))/sum(num_files), 3) as char(6)) || '%' as
-"file success rate %",
-sum(num_files) - sum (case when  num_files <  coalesce(num_files_complete,0) then num_files
-else coalesce(num_files_complete,0)  end) as "C",
-cast (round(100 *1.0*(  sum(num_files) -  sum(case when  num_files <  coalesce(num_files_complete,0)
-then num_files else coalesce(num_files_complete,0)  end))/sum(num_files),3) as char (6) )
-|| '%' as "failed rate %",
-sum(num_files)  as "A"
-from restores
-where
-is_ready = true and
-restores.finish_time > now() - interval '7 days'
-and (restore_type_id is null or restore_type_id = 3 or restore_type_id = 4)
-group by coalesce(restore_type_id,0)*0;
-
-
+sum(ddd.completed_files) as "Number",
+cast
+( round(
+100*1.0* sum(ddd.completed_files  )/ sum(ddd.num_files)
+ , 3)
+as char (6)) ||'%' as  "Percentage"
+ ,
+sum(num_files) - sum(ddd.completed_files)    as "Number",
+cast
+( round(
+100 - 100*1.0* sum(ddd.completed_files  )/ sum(ddd.num_files)
+ , 3)
+as char (6)) ||'%' as  "Percentage"
+,
+sum(ddd.num_files) as "Number"
+from
+(select site,   (case when  coalesce(num_files,0) >  coalesce(num_files_complete,0) then   coalesce(num_files_complete,0) else  coalesce(num_files,0)  end   ) as completed_files,  coalesce(num_files,0) as num_files from
+restores where
+num_files > 0 and
+finish_time > now() - interval '7 days'        and (restore_type_id  is null or (restore_type_id = 3)  or restore_type_id = 4  )  and restores.is_ready = true ) as ddd;
 
 
 
 
 select
-sum( case when  num_files <  coalesce(num_files_complete,0)
-then num_files else coalesce(num_files_complete,0)  end) as "B",
-cast(round(100 *1.0*(sum( case when  num_files <  coalesce(num_files_complete,0) then
-num_files else coalesce(num_files_complete,0)  end ))/sum(num_files), 3) as char(6))
-|| '%' as "file success rate %",
-sum(num_files) - sum(case when  num_files <  coalesce(num_files_complete,0) then
-num_files else coalesce(num_files_complete,0)  end) as "C",
-cast (round(100 *1.0*(  sum(num_files) -  sum(case when  num_files <  coalesce(num_files_complete,0) then
-num_files else coalesce(num_files_complete,0)  end))/sum(num_files),3) as char (6) )
-|| '%' as "failed rate %",
-sum(num_files)  as "A"
-from restores
-where
-is_ready = true and
-restores.finish_time > now() - interval '30 days'
-and (restore_type_id is null or restore_type_id = 3 or restore_type_id = 4)
-group by coalesce(restore_type_id,0)*0;
+sum(ddd.completed_files) as "Number",
+cast
+( round(
+100*1.0* sum(ddd.completed_files  )/ sum(ddd.num_files)
+ , 3)
+as char (6)) ||'%' as  "Percentage"
+ ,
+
+ sum(num_files) - sum(ddd.completed_files)    as "Number",
+cast
+( round(
+100 - 100*1.0* sum(ddd.completed_files  )/ sum(ddd.num_files)
+ , 3)
+as char (6)) ||'%' as  "Percentage"
+,
+sum(ddd.num_files) as "Number"
+from
+(select site,   (case when  coalesce(num_files,0) >  coalesce(num_files_complete,0) then   coalesce(num_files_complete,0) else  coalesce(num_files,0)  end   ) as completed_files,  coalesce(num_files,0) as num_files from
+restores where
+
+num_files > 0 and
+finish_time > now() - interval '30 days'        and (restore_type_id  is null or (restore_type_id = 3)  or restore_type_id = 4  )  and restores.is_ready = true ) as ddd;
+
+
+
 
 
 select
@@ -172,6 +227,8 @@ where
 (restore_type_id is null or
 restore_type_id = 3 or restore_type_id = 4) and
 finish_time > now() - interval '1 days'
+and
+num_files > 0
 and (1.0 *(num_files-coalesce(num_files_complete,0))/ num_files > 0.05)
 and is_ready = true order by id desc) as t2
 left join restore_types on t2.type =  restore_types.id order by restore_id desc ;
@@ -180,130 +237,183 @@ left join restore_types on t2.type =  restore_types.id order by restore_id desc 
 
 
 
-select
-coalesce(restore_types.name, 'yanni') as restore_type,
-restores,
-perfect_restores,
-"restores_with_at_missing_files %" as "% of restores with missing files",
-sum_requestfiles as "sum request file number",
-sum_failedfiles as "sum failed file number",
-"failedrate %" as "failed file rate"
-from (
-select
-restore_type_id,
-count(*) as restores,
-sum(case when num_files <= coalesce(num_files_complete,0) then 1 else 0 end) as perfect_restores,
-cast(round(100 *1.0*(count(*) - sum(case when num_files <= coalesce(num_files_complete,0) then 1 else 0 end))/ count(*), 3)
-as char(6)) || '%' as  "restores_with_at_missing_files %",
-sum(num_files) as sum_requestfiles,
-sum(   case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0) end          )  as sum_completefiles,
-sum(num_files) - sum( case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0) end  ) as sum_failedfiles,
-cast(round(100 *1.0*(sum(num_files)- sum( case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0) end  ))/sum(num_files),3)
-as char(6)) || '%'
-as "failedrate %"
-from restores
-where
-is_ready = true and
-restores.finish_time > now() - interval '1 days'
-and (
-restore_type_id  is null or
-(restore_type_id = 3)  or restore_type_id = 4  )
-group by restore_type_id
-order by  restore_type_id)
-as t2
-left  join
-restore_types
-on t2.restore_type_id =  restore_types.id;
-
-
-
-
-
-select
-site as Site,
-count(*) as Restores,
-sum(case when num_files <= coalesce(num_files_complete,0) then 1 else 0 end) as "Perfect Restores",
-cast(round(100 * 1.0*(count(*) - sum(case when num_files <= coalesce(num_files_complete,0) then 1 else 0 end))/ count(*),3)
-as char(6)) || '%'
-as "% of Restores with missing files",
-sum(num_files) as "Sum Request files",
-sum(case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0) end ) as Sum_CompleteFiles,
-sum(num_files) - sum( case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0) end      ) as Sum_FailedFiles,
-cast(round(100 * 1.0*(sum(num_files)- sum(    case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0) end   ))/sum(num_files), 3) as char(6)) || '%'
-as "Failed file Rate"
-from restores, restore_types
-where
-restores.is_ready = true and
-restores.restore_type_id = restore_types.id and
-restores.finish_time > now() - interval '1 days' and
-(restore_types.id = 3 or restore_types.id =  4 or restore_types.id is null  )
-group by Site
-order by  Site ;
-
-
 
 
 
 select
 coalesce(restore_types.name, 'yanni') as restore_type,
-restores,
-perfect_restores,
-"restores_with_at_missing_files %" as "% of restores with missing files",
-sum_requestfiles as "sum request file number",
-sum_failedfiles as "sum failed file number",
-"failedrate %" as "failed file rate"
-from (
-select
-restore_type_id,
-count(*) as restores,
-sum(case when num_files <= coalesce(num_files_complete,0) then 1 else 0 end) as perfect_restores,
-cast(round(100 *1.0*(count(*) - sum(case when num_files <= coalesce(num_files_complete,0) then 1 else 0 end))/ count(*), 3)
-as char(6)) || '%' as  "restores_with_at_missing_files %",
-sum(num_files) as sum_requestfiles,
-sum(   case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0) end          )  as sum_completefiles,
-sum(num_files) - sum( case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0) end  ) as sum_failedfiles,
-cast(round(100 *1.0*(sum(num_files)- sum( case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0) end  ))/sum(num_files),3)
-as char(6)) || '%'
-as "failedrate %"
-from restores
-where
-is_ready = true and
-restores.finish_time > now() - interval '7 days'
-and (
-restore_type_id  is null or
-(restore_type_id = 3)  or restore_type_id = 4  )
-group by restore_type_id
-order by  restore_type_id)
-as t2
-left  join
-restore_types
-on t2.restore_type_id =  restore_types.id;
+
+
+count(*) as "restores",
+sum( case when ddd.completed_files = ddd.num_files then 1 else 0 end ) as "Perfect Restores",
 
 
 
+cast
+(round(
 
+100*1.0*sum( case when ddd.completed_files < ddd.num_files then 1 else 0 end ) / count(*)
+,3)
+ as char (6)) || '%'
 
-
-
-
-
-select
-site as Site,
-count(*) as Restores,
-sum(case when num_files <= coalesce(num_files_complete,0) then 1 else 0 end) as "Perfect Restores",
-cast(round(100 * 1.0*(count(*) - sum(case when num_files <= coalesce(num_files_complete,0) then 1 else 0 end))/ count(*),3)
-as char(6)) || '%'
 as "% of Restores with missing files",
-sum(num_files) as "Sum Request files",
-sum(case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0) end ) as Sum_CompleteFiles,
-sum(num_files) - sum( case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0) end      ) as Sum_FailedFiles,
-cast(round(100 * 1.0*(sum(num_files)- sum(    case when num_files < coalesce(num_files_complete,0) then num_files else coalesce(num_files_complete,0) end   ))/sum(num_files), 3) as char(6)) || '%'
-as "Failed file Rate"
-from restores, restore_types
-where
-restores.is_ready = true and
-restores.restore_type_id = restore_types.id and
-restores.finish_time > now() - interval '7 days' and
-(restore_types.id = 3 or restore_types.id =  4 or restore_types.id is null  )
-group by Site
-order by  Site ;
+
+
+
+
+
+
+
+sum(ddd.num_files)  as "Sum Request files",
+ sum(ddd.completed_files)  as "sum_completefiles",
+sum(ddd.num_files)  - sum(ddd.completed_files)    as "sum_failedfiles",
+cast
+(round(
+
+100 *1.0* (sum(ddd.num_files)  - sum(ddd.completed_files) ) / sum(ddd.num_files)
+,3)
+ as char (6)) || '%'     as  "Failed file Rate"
+
+from
+(select restore_type_id, site,   (case when  coalesce(num_files,0) >  coalesce(num_files_complete,0) then   coalesce(num_files_complete,0) else  coalesce(num_files,0)  end   ) as completed_files,  coalesce(num_files,0) as num_files from
+restores where
+
+num_files > 0 and
+finish_time > now() - interval '1 days'        and (restore_type_id  is null or (restore_type_id = 3)  or restore_type_id = 4  )  and restores.is_ready = true ) as ddd
+left join
+restore_types
+on ddd.restore_type_id =  restore_types.id
+group by restore_types.name;
+
+
+
+
+
+
+select
+site,
+count(*) as "restores",
+sum( case when ddd.completed_files = ddd.num_files then 1 else 0 end ) as "Perfect Restores",
+
+cast
+(round(
+
+100*1.0*sum( case when ddd.completed_files < ddd.num_files then 1 else 0 end ) / count(*)
+,3)
+ as char (6)) || '%'
+
+as "% of Restores with missing files",
+
+sum(ddd.num_files)  as "Sum Request files",
+ sum(ddd.completed_files)  as "sum_completefiles",
+sum(ddd.num_files)  - sum(ddd.completed_files)    as "sum_failedfiles",
+cast
+(round(
+
+100 *1.0* (sum(ddd.num_files)  - sum(ddd.completed_files) ) / sum(ddd.num_files)
+,3)
+ as char (6)) || '%'     as  "Failed file Rate"
+
+from
+(select restore_type_id, site,   (case when  coalesce(num_files,0) >  coalesce(num_files_complete,0) then   coalesce(num_files_complete,0) else  coalesce(num_files,0)  end   ) as completed_files,  coalesce(num_files,0) as num_files from
+restores where
+
+
+num_files > 0 and
+finish_time > now() - interval '1 days'        and (restore_type_id  is null or (restore_type_id = 3)  or restore_type_id = 4  )  and restores.is_ready = true ) as ddd
+group by site;
+
+
+
+
+
+
+select
+coalesce(restore_types.name, 'yanni') as restore_type,
+
+
+count(*) as "restores",
+sum( case when ddd.completed_files = ddd.num_files then 1 else 0 end ) as "Perfect Restores",
+
+
+
+cast
+(round(
+
+100*1.0*sum( case when ddd.completed_files < ddd.num_files then 1 else 0 end ) / count(*)
+,3)
+ as char (6)) || '%'
+
+as "% of Restores with missing files",
+
+
+
+
+
+
+
+sum(ddd.num_files)  as "Sum Request files",
+ sum(ddd.completed_files)  as "sum_completefiles",
+sum(ddd.num_files)  - sum(ddd.completed_files)    as "sum_failedfiles",
+cast
+(round(
+
+100 *1.0* (sum(ddd.num_files)  - sum(ddd.completed_files) ) / sum(ddd.num_files)
+,3)
+ as char (6)) || '%'     as  "Failed file Rate"
+
+from
+(select restore_type_id, site,   (case when  coalesce(num_files,0) >  coalesce(num_files_complete,0) then   coalesce(num_files_complete,0) else  coalesce(num_files,0)  end   ) as completed_files,  coalesce(num_files,0) as num_files from
+restores where
+
+num_files > 0 and
+
+finish_time > now() - interval '7 days'        and (restore_type_id  is null or (restore_type_id = 3)  or restore_type_id = 4  )  and restores.is_ready = true ) as ddd
+left join
+restore_types
+on ddd.restore_type_id =  restore_types.id
+group by restore_types.name;
+
+
+
+
+
+
+select
+site,
+count(*) as "restores",
+sum( case when ddd.completed_files = ddd.num_files then 1 else 0 end ) as "Perfect Restores",
+
+cast
+(round(
+
+100*1.0*sum( case when ddd.completed_files < ddd.num_files then 1 else 0 end ) / count(*)
+,3)
+ as char (6)) || '%'
+
+as "% of Restores with missing files",
+
+sum(ddd.num_files)  as "Sum Request files",
+ sum(ddd.completed_files)  as "sum_completefiles",
+sum(ddd.num_files)  - sum(ddd.completed_files)    as "sum_failedfiles",
+cast
+(round(
+
+100 *1.0* (sum(ddd.num_files)  - sum(ddd.completed_files) ) / sum(ddd.num_files)
+,3)
+ as char (6)) || '%' as "Failed file Rate"
+
+from
+(select restore_type_id, site,   (case when  coalesce(num_files,0) >  coalesce(num_files_complete,0) then   coalesce(num_files_complete,0) else  coalesce(num_files,0)  end   ) as completed_files,  coalesce(num_files,0) as num_files from
+restores where
+
+num_files > 0 and
+finish_time > now() - interval '7 days' and 
+(restore_type_id  is null or (restore_type_id = 3)  or restore_type_id = 4)  
+and restores.is_ready = true ) as ddd
+group by site;
+
+
+
+
+
